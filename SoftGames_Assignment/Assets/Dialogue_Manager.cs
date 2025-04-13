@@ -93,7 +93,7 @@ public class Dialogue_Manager : MonoBehaviour
                 cleanText = Regex.Replace(cleanText, @"{.*?}", "").Trim();
             }
 
-            nameText.text = line.name + " : ";
+            nameText.text = line.name;
             dialogueText.text = "\"" + cleanText + "\"";
 
             // Show single avatar
