@@ -6,150 +6,154 @@ using TMPro;
 using System.Text.RegularExpressions;
 using UnityEngine.Networking;
 
-[System.Serializable]
-public class DialogueLine
+namespace MagicWords
 {
-    public string name;
-    public string text;
-}
 
-[System.Serializable]
-public class Emoji
-{
-    public string name;
-    public string url;
-}
-
-[System.Serializable]
-public class Avatar
-{
-    public string name;
-    public string url;
-    public string position; // optional now
-}
-
-[System.Serializable]
-public class DialogueData
-{
-    public List<DialogueLine> dialogue;
-    public List<Emoji> emojies;
-    public List<Avatar> avatars;
-}
-
-public class Dialogue_Manager : MonoBehaviour
-{
-    [Header("UI Elements")]
-    public Image speakerAvatar;
-    public TextMeshProUGUI nameText;
-    public TextMeshProUGUI dialogueText;
-    public Image reactionImage;
-
-    [Header("Dialogue Settings")]
-    public string dialogueJsonUrl;
-
-    private DialogueData dialogueData;
-    private Dictionary<string, Avatar> avatarLookup;
-    private int currentLine = 0;
-
-    void Start()
+    [System.Serializable]
+    public class DialogueLine
     {
-        StartCoroutine(LoadDialogueFromURL());
+        public string name;
+        public string text;
     }
 
-    IEnumerator LoadDialogueFromURL()
+    [System.Serializable]
+    public class Emoji
     {
-        UnityWebRequest www = UnityWebRequest.Get(dialogueJsonUrl);
-        yield return www.SendWebRequest();
+        public string name;
+        public string url;
+    }
 
-        if (www.result != UnityWebRequest.Result.Success)
+    [System.Serializable]
+    public class Avatar
+    {
+        public string name;
+        public string url;
+        public string position; // optional now
+    }
+
+    [System.Serializable]
+    public class DialogueData
+    {
+        public List<DialogueLine> dialogue;
+        public List<Emoji> emojies;
+        public List<Avatar> avatars;
+    }
+
+    public class Dialogue_Manager : MonoBehaviour
+    {
+        [Header("UI Elements")]
+        public Image speakerAvatar;
+        public TextMeshProUGUI nameText;
+        public TextMeshProUGUI dialogueText;
+        public Image reactionImage;
+
+        [Header("Dialogue Settings")]
+        public string dialogueJsonUrl;
+
+        private DialogueData dialogueData;
+        private Dictionary<string, Avatar> avatarLookup;
+        private int currentLine = 0;
+
+        void Start()
         {
-            Debug.LogError("Failed to download dialogue JSON: " + www.error);
-            yield break;
+            StartCoroutine(LoadDialogueFromURL());
         }
 
-        string jsonText = www.downloadHandler.text;
-        dialogueData = JsonUtility.FromJson<DialogueData>(FixJson(jsonText));
-
-        avatarLookup = new Dictionary<string, Avatar>();
-        foreach (var a in dialogueData.avatars)
-            avatarLookup[a.name] = a;
-
-        StartCoroutine(PlayDialogue());
-    }
-
-    IEnumerator PlayDialogue()
-    {
-        while (currentLine < dialogueData.dialogue.Count)
+        IEnumerator LoadDialogueFromURL()
         {
-            var line = dialogueData.dialogue[currentLine];
-            string cleanText = line.text;
+            UnityWebRequest www = UnityWebRequest.Get(dialogueJsonUrl);
+            yield return www.SendWebRequest();
 
-            // Parse reaction
-            string reaction = "";
-            var match = Regex.Match(cleanText, @"{(.*?)}");
-            if (match.Success)
+            if (www.result != UnityWebRequest.Result.Success)
             {
-                reaction = match.Groups[1].Value;
-                cleanText = Regex.Replace(cleanText, @"{.*?}", "").Trim();
+                Debug.LogError("Failed to download dialogue JSON: " + www.error);
+                yield break;
             }
 
-            nameText.text = line.name;
-            dialogueText.text = "\"" + cleanText + "\"";
+            string jsonText = www.downloadHandler.text;
+            dialogueData = JsonUtility.FromJson<DialogueData>(FixJson(jsonText));
 
-            // Show single avatar
-            if (avatarLookup.TryGetValue(line.name, out Avatar speaker))
-            {
-                StartCoroutine(LoadImage(speaker.url, speakerAvatar));
-            }
+            avatarLookup = new Dictionary<string, Avatar>();
+            foreach (var a in dialogueData.avatars)
+                avatarLookup[a.name] = a;
 
-            // Show emoji reaction
-            if (!string.IsNullOrEmpty(reaction))
+            StartCoroutine(PlayDialogue());
+        }
+
+        IEnumerator PlayDialogue()
+        {
+            while (currentLine < dialogueData.dialogue.Count)
             {
-                var emoji = dialogueData.emojies.Find(e => e.name == reaction);
-                if (emoji != null)
+                var line = dialogueData.dialogue[currentLine];
+                string cleanText = line.text;
+
+                // Parse reaction
+                string reaction = "";
+                var match = Regex.Match(cleanText, @"{(.*?)}");
+                if (match.Success)
                 {
-                    reactionImage.gameObject.SetActive(true);
-                    StartCoroutine(LoadImage(emoji.url, reactionImage));
+                    reaction = match.Groups[1].Value;
+                    cleanText = Regex.Replace(cleanText, @"{.*?}", "").Trim();
                 }
+
+                nameText.text = line.name;
+                dialogueText.text = "\"" + cleanText + "\"";
+
+                // Show single avatar
+                if (avatarLookup.TryGetValue(line.name, out Avatar speaker))
+                {
+                    StartCoroutine(LoadImage(speaker.url, speakerAvatar));
+                }
+
+                // Show emoji reaction
+                if (!string.IsNullOrEmpty(reaction))
+                {
+                    var emoji = dialogueData.emojies.Find(e => e.name == reaction);
+                    if (emoji != null)
+                    {
+                        reactionImage.gameObject.SetActive(true);
+                        StartCoroutine(LoadImage(emoji.url, reactionImage));
+                    }
+                }
+                else
+                {
+                    reactionImage.gameObject.SetActive(false);
+                }
+
+                // Wait for input
+                yield return new WaitUntil(() => !Input.GetMouseButton(0));
+                yield return new WaitUntil(() => Input.GetMouseButtonDown(0));
+
+                currentLine++;
+            }
+
+            dialogueText.text = "The End!";
+            nameText.text = "";
+            reactionImage.gameObject.SetActive(false);
+        }
+
+        IEnumerator LoadImage(string url, Image target)
+        {
+            UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+            {
+                Texture2D tex = DownloadHandlerTexture.GetContent(www);
+                target.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                target.gameObject.SetActive(true);
             }
             else
             {
-                reactionImage.gameObject.SetActive(false);
+                Debug.LogWarning($"Failed to load image from {url}: {www.error}");
             }
-
-            // Wait for input
-            yield return new WaitUntil(() => !Input.GetMouseButton(0));
-            yield return new WaitUntil(() => Input.GetMouseButtonDown(0));
-
-            currentLine++;
         }
 
-        dialogueText.text = "The End!";
-        nameText.text = "";
-        reactionImage.gameObject.SetActive(false);
-    }
-
-    IEnumerator LoadImage(string url, Image target)
-    {
-        UnityWebRequest www = UnityWebRequestTexture.GetTexture(url);
-        yield return www.SendWebRequest();
-
-        if (www.result == UnityWebRequest.Result.Success)
+        string FixJson(string value)
         {
-            Texture2D tex = DownloadHandlerTexture.GetContent(www);
-            target.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
-            target.gameObject.SetActive(true);
+            if (value.TrimStart().StartsWith("{"))
+                return value;
+            return "{\"dialogue\":" + value + "}";
         }
-        else
-        {
-            Debug.LogWarning($"Failed to load image from {url}: {www.error}");
-        }
-    }
-
-    string FixJson(string value)
-    {
-        if (value.TrimStart().StartsWith("{"))
-            return value;
-        return "{\"dialogue\":" + value + "}";
     }
 }
